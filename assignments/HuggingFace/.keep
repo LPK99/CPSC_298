@@ -1,0 +1,65 @@
+# More imports that might be necessary for training
+from transformers import Trainer
+from datasets import load_dataset
+
+def main():
+    """
+    Use Trainer to finetune model 'bigcode/starcoder' on dataset 'smangrul/hf-stack-v1' for Causal language modeling task
+    along with PEFT 'LoraConfig' with 'rank=16' and 'alpha=32'
+    """
+
+    # Initialize the model
+    model_name_or_path = "bigcode/starcoder"
+    tokenizer_name_or_path = "bigcode/starcoder"
+    model = AutoModelForCausalLM.from_pretrained(model_name_or_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+
+    # Initialize the PEFT config and get the PEFT model
+    peft_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0
+    )
+    model = get_peft_model(model, peft_config)
+
+    # Initialize the training arguments
+    training_args = TrainingArguments(
+        output_dir="smangrul_lora_causal_lm_bigcode_starcoder_v1",
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,
+        learning_rate=2e-5,
+        warmup_steps=500,
+        num_train_epochs=10,
+        fp16=True,
+        logging_steps=10,
+        evaluation_strategy="steps"
+    )
+
+    # Load dataset
+    dataset = load_dataset("smangrul/hf-stack-v1")
+
+    # For example, tokenizing the texts:
+    def tokenize_function(examples):
+        return tokenizer(examples['text'], padding='max_length', truncation=True)
+
+    tokenized_datasets = dataset.map(tokenize_function, batched=True)
+
+    # Initialize Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=tokenized_datasets['train'],
+        eval_dataset=tokenized_datasets['validation'],
+        tokenizer=tokenizer
+    )
+
+    # Train the model
+    trainer.train()
+
+    # Save the model
+    trainer.save_model()
+
+
+if __name__ == "__main__":
+    main()
